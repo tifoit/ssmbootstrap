@@ -10,7 +10,7 @@
 * weui
 * log4jdbc/log4jdbc-remix/log4jdbc-log4j2(show sql)
 * hibernate-validator
-* [spring-jsonp-support](https://github.com/bhagyas/spring-jsonp-support)
+* spring-jsonp-support
 * SUI mobile
 * lombok
 * ehcache
