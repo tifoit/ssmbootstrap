@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:mvc="http://www.springframework.org/schema/mvc"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans    
+                        http://www.springframework.org/schema/beans/spring-beans-3.2.xsd    
+                        http://www.springframework.org/schema/context    
+                        http://www.springframework.org/schema/context/spring-context-3.2.xsd    
+                        http://www.springframework.org/schema/mvc
+                        http://www.springframework.org/schema/mvc/spring-mvc-3.2.xsd
+                        http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-3.2.xsd
+                        http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-3.2.xsd">
+	<bean id="oridataSource" class="com.alibaba.druid.pool.DruidDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="${driver}" />
+		<property name="url" value="${url}" />
+		<property name="username" value="${username}" />
+		<property name="password" value="${password}" />
+		<property name="initialSize" value="${initialSize}"></property>
+		<property name="maxActive" value="${maxActive}"></property>
+		<property name="minIdle" value="${minIdle}"></property>
+		<property name="maxWait" value="${maxWait}"></property>
+		<!-- 用来检测连接是否有效的sql，要求是一个查询语句 -->
+		<property name="validationQuery" value="${validationQuery}" />
+		<!-- 打开PSCache，并且指定每个连接上PSCache的大小 -->
+		<property name="poolPreparedStatements" value="true" />
+		<property name="maxPoolPreparedStatementPerConnectionSize"
+			value="20" />
+		<!-- 配置监控统计拦截的filters,wall-sql防火墙支持 -->
+		<property name="filters" value="stat,wall" />
+	</bean>
+
+	<!-- Log4jbdc-remix -->
+	<!-- <bean id="dataSource" class="net.sf.log4jdbc.Log4jdbcProxyDataSource">
+		<constructor-arg ref="oridataSource" />
+	</bean> -->
+	
+	<!--  log4jdbc-log4j2 -->
+	<bean id="dataSource" class="net.sf.log4jdbc.sql.jdbcapi.DataSourceSpy">
+		<constructor-arg ref="oridataSource" />
+	</bean>
+
+	<!-- 多数据源配置 -->
+	<bean id="dataSource2" class="com.alibaba.druid.pool.DruidDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="${driver2}" />
+		<property name="url" value="${url2}" />
+		<property name="username" value="${username2}" />
+		<property name="password" value="${password2}" />
+	</bean>
+
+	<!-- spring方法调用监控 -->
+	<bean id="druid-stat-interceptor"
+		class="com.alibaba.druid.support.spring.stat.DruidStatInterceptor"></bean>
+	<bean id="druid-stat-pointcut" class="org.springframework.aop.support.JdkRegexpMethodPointcut"
+		scope="prototype">
+		<property name="patterns">
+			<list>
+				<value>cn.com.ttblog.ssmbootstrap_table.service.*</value>
+				<value>cn.com.ttblog.ssmbootstrap_table.dao.*</value>
+			</list>
+		</property>
+	</bean>
+
+	<aop:config>
+		<aop:advisor advice-ref="druid-stat-interceptor"
+			pointcut-ref="druid-stat-pointcut" />
+	</aop:config>
+
+	<!-- 使用mybatis进行数据处理有四种方式(SqlSessionTemplate/SqlSessionDaoSupport/MapperFactoryBean/MapperScannerConfigurer) -->
+	<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean"
+		name="sf">
+		<property name="dataSource" ref="dataSource" />
+		<!-- mybatis全局配置 -->
+		<property name="configLocation" value="classpath:spring/mybatis-globalcfg.xml"></property>
+		<property name="mapperLocations"
+			value="classpath:cn/com/ttblog/ssmbootstrap_table/dao/*.xml"></property>
+	</bean>
+
+	<!-- sqlSessionFactory2 -->
+	<bean id="sqlSessionFactory2" class="org.mybatis.spring.SqlSessionFactoryBean"
+		name="sf2">
+		<property name="dataSource" ref="dataSource2" />
+		<property name="mapperLocations"
+			value="classpath:cn/com/ttblog/ssmbootstrap_table/dao2/*.xml"></property>
+	</bean>
+
+	<bean id="sqlSession" class="org.mybatis.spring.SqlSessionTemplate" scope="prototype">
+		<constructor-arg index="0" ref="sqlSessionFactory" />
+	</bean>
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="cn.com.ttblog.ssmbootstrap_table.dao" />
+		<property name="sqlSessionFactoryBeanName" value="sf"></property>
+	</bean>
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="cn.com.ttblog.ssmbootstrap_table.dao2" />
+		<property name="sqlSessionFactoryBeanName" value="sf2"></property>
+	</bean>
+	
+	<!-- 方式一声明式事务配置 http://docs.spring.io/spring/docs/3.0.x/reference/transaction.html#transaction-declarative-rolling-back -->
+	<bean id="transactionManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource"></property>
+	</bean>
+	<tx:advice id="trasactionAdvice" transaction-manager="transactionManager">
+		<tx:attributes>
+			<tx:method name="*" propagation="REQUIRED" rollback-for="Exception" />
+		</tx:attributes>
+	</tx:advice>
+	<aop:config>
+		<aop:pointcut
+			expression="execution(* cn.com.ttblog.ssmbootstrap_table.serviceimpl.*.*(..))"
+			id="trasactionService" />
+		<aop:advisor pointcut-ref="trasactionService" advice-ref="trasactionAdvice" order="1" />
+	</aop:config>
+	
+	<!-- 方式二注解事务,两种配置可以并存 http://blog.csdn.net/feng27156/article/details/8740223  -->
+	<!-- <tx:annotation-driven order="0" transaction-manager="transactionManager"/> -->	
+	
+	<!-- log4jdbc -->
+	<!-- <bean id="log4jdbcInterceptor" class="net.sf.log4jdbc.DataSourceSpyInterceptor" 
+		/> <bean id="dataSourceLog4jdbcAutoProxyCreator" class="org.springframework.aop.framework.autoproxy.BeanNameAutoProxyCreator"> 
+		<property name="interceptorNames"> <list> <value>log4jdbcInterceptor</value> 
+		</list> </property> <property name="beanNames"> <list> <value>dataSource</value> 
+		</list> </property> </bean> -->
+
+</beans>
